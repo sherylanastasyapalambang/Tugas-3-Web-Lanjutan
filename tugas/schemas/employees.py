@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 
 class EmployeeBase(BaseModel):
     lastName: str
@@ -7,14 +7,14 @@ class EmployeeBase(BaseModel):
     extension: str
     email: str
     officeCode: str
-    reportsTo: Optional[int] = None
+    reportsTo: Optional[int]
     jobTitle: str
 
 class EmployeeCreate(EmployeeBase):
-    pass
+    employeeNumber: int
 
 class Employee(EmployeeBase):
     employeeNumber: int
 
     class Config:
-        from_attributes = True
+        orm_mode = True

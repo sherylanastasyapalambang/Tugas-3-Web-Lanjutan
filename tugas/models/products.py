@@ -1,5 +1,5 @@
-from sqlalchemy import Column, String, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy import Column, String, Integer, Float, ForeignKey
 from database import Base
 
 class Product(Base):
@@ -7,7 +7,13 @@ class Product(Base):
 
     productCode = Column(String(15), primary_key=True, index=True)
     productName = Column(String(70))
-    productLine = Column(String(50), ForeignKey("productlines.productLine"))  # ForeignKey to ProductLine
+    productLine = Column(String(50), ForeignKey("productlines.productLine"))
+    productScale = Column(String(10))
+    productVendor = Column(String(50))
+    productDescription = Column(String)
+    quantityInStock = Column(Integer)
+    buyPrice = Column(Float)
+    MSRP = Column(Float)
 
-    # Use string references for relationships to ensure SQLAlchemy resolves it after class definitions
+# ... kolom lainnya
     productLine_rel = relationship("ProductLines", back_populates="products")

@@ -1,30 +1,33 @@
 from sqlalchemy.orm import Session
-from models.productlines import ProductLines
-from schemas.productlines import ProductLineCreate
+from models.products import Product
+from schemas.products import ProductCreate, ProductUpdate
 
-def get_all(db: Session):
-    return db.query(ProductLines).all()
+def get_all_products(db: Session):
+    return db.query(Product).all()
 
-def get_one(db: Session, id: int):
-    return db.query(ProductLines).filter(ProductLines.id == id).first()
+def get_product_by_code(db: Session, productCode: str):
+    return db.query(Product).filter(Product.productCode == productCode).first()
 
-def create(db: Session, id: int, data: ProductLineCreate):
-    new_productline = ProductLines(
-        id=id,
-        productLine=data.productLine,
-        textDescription=data.textDescription,
-        htmlDescription=None,  # Sesuai permintaan: apapun input akan bernilai NULL
-        image=None
-    )
-    db.add(new_productline)
+
+def create_product(db: Session, product: ProductCreate):
+    db_product = Product(**product.dict())
+    db.add(db_product)
     db.commit()
-    db.refresh(new_productline)
-    return new_productline
+    db.refresh(db_product)
+    return db_product
 
-def delete(db: Session, id: int):
-    productline = get_one(db, id)
-    if productline:
-        db.delete(productline)
+def update_product(db: Session, productCode: str, product: ProductUpdate):
+    db_product = db.query(Product).filter(Product.productCode == productCode).first()
+    if db_product:
+        for key, value in product.dict().items():
+            setattr(db_product, key, value)
         db.commit()
-        return True
-    return False
+        db.refresh(db_product)
+    return db_product
+
+def delete_product(db: Session, productCode: str):
+    db_product = db.query(Product).filter(Product.productCode == productCode).first()
+    if db_product:
+        db.delete(db_product)
+        db.commit()
+    return db_product

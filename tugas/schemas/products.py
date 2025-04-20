@@ -1,20 +1,25 @@
 from pydantic import BaseModel
-from typing import Optional
 
 class ProductBase(BaseModel):
     productName: str
     productLine: str
     productScale: str
     productVendor: str
-    productDescription: Optional[str]
+    productDescription: str
     quantityInStock: int
     buyPrice: float
-    msrp: float
+    MSRP: float
 
 class ProductCreate(ProductBase):
-    pass
+    productCode: str  # Required saat create
 
-class Product(ProductBase):
-    productCode: str
+class ProductUpdate(ProductBase):
+    pass  # productCode tidak perlu diupdate
+
+class ProductSimple(ProductCreate):
     class Config:
-        from_attributes = True
+        orm_mode = True
+
+class Product(ProductSimple):
+    class Config:
+        orm_mode = True
