@@ -17,3 +17,4 @@ class Product(Base):
 
 # ... kolom lainnya
     productLine_rel = relationship("ProductLines", back_populates="products")
+    orderdetails = relationship("OrderDetail", back_populates="product")

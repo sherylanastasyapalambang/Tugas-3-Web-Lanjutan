@@ -19,3 +19,6 @@ class Employee(Base):
 
     # Relasi self-referencing: siapa yang menjadi bos (atasan)
     manager = relationship("Employee", remote_side=[employeeNumber], backref=backref("subordinates", lazy="joined"))
+
+    # Relasi ke customers
+    customers = relationship("Customer", back_populates="salesRep")

@@ -15,6 +15,17 @@ import schemas.offices as office_schema
 import crud.employees as employee_crud
 import schemas.employees as employee_schema
 
+import crud.customers as customer_crud
+import schemas.customers as customer_schema
+
+import crud.orderdetails as od_crud
+import schemas.orderdetails as od_schema
+
+import crud.orders as order_crud
+import schemas.orders as order_schema
+
+import crud.payments as payment_crud
+import schemas.payments as payment_schema
 
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -174,4 +185,139 @@ def delete_employee(employeeNumber: int, db: Session = Depends(get_db)):
     result = employee_crud.delete(db, employeeNumber)
     if not result:
         raise HTTPException(status_code=404, detail="Employee not found")
+    return {"ok": True}
+
+# ============================
+# CUSTOMERS ENDPOINTS
+# ============================
+
+
+@app.get("/customers", response_model=list[customer_schema.Customer])
+def read_customers(db: Session = Depends(get_db)):
+    return customer_crud.get_all(db)
+
+@app.get("/customers/{customerNumber}", response_model=customer_schema.Customer)
+def read_customer(customerNumber: int, db: Session = Depends(get_db)):
+    customer = customer_crud.get_one(db, customerNumber)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+@app.post("/customers", response_model=customer_schema.Customer)
+def create_customer(data: customer_schema.CustomerCreate, db: Session = Depends(get_db)):
+    return customer_crud.create(db, data)
+
+@app.put("/customers/{customerNumber}", response_model=customer_schema.Customer)
+def update_customer(customerNumber: int, data: customer_schema.CustomerCreate, db: Session = Depends(get_db)):
+    result = customer_crud.update(db, customerNumber, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return result
+
+@app.delete("/customers/{customerNumber}")
+def delete_customer(customerNumber: int, db: Session = Depends(get_db)):
+    result = customer_crud.delete(db, customerNumber)
+    if not result:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"ok": True}
+
+
+# ============================
+# ORDER DETAILS ENDPOINTS
+# ============================
+
+@app.get("/orderdetails", response_model=list[od_schema.OrderDetail])
+def read_orderdetails(db: Session = Depends(get_db)):
+    return od_crud.get_all_orderdetails(db)
+
+@app.get("/orderdetails/{orderNumber}/{productCode}", response_model=od_schema.OrderDetail)
+def read_orderdetail(orderNumber: int, productCode: str, db: Session = Depends(get_db)):
+    od = od_crud.get_orderdetail(db, orderNumber, productCode)
+    if not od:
+        raise HTTPException(status_code=404, detail="OrderDetail not found")
+    return od
+
+@app.post("/orderdetails", response_model=od_schema.OrderDetail)
+def create_orderdetail(od: od_schema.OrderDetailCreate, db: Session = Depends(get_db)):
+    return od_crud.create_orderdetail(db, od)
+
+@app.put("/orderdetails/{orderNumber}/{productCode}", response_model=od_schema.OrderDetail)
+def update_orderdetail(orderNumber: int, productCode: str, od: od_schema.OrderDetailUpdate, db: Session = Depends(get_db)):
+    updated = od_crud.update_orderdetail(db, orderNumber, productCode, od)
+    if not updated:
+        raise HTTPException(status_code=404, detail="OrderDetail not found")
+    return updated
+
+@app.delete("/orderdetails/{orderNumber}/{productCode}", response_model=od_schema.OrderDetail)
+def delete_orderdetail(orderNumber: int, productCode: str, db: Session = Depends(get_db)):
+    deleted = od_crud.delete_orderdetail(db, orderNumber, productCode)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="OrderDetail not found")
+    return deleted
+
+
+# ============================
+# ORDER ENDPOINTS
+# ============================
+@app.get("/orders", response_model=list[order_schema.Order])
+def read_orders(db: Session = Depends(get_db)):
+    return order_crud.get_all_orders(db)
+
+@app.get("/orders/{orderNumber}", response_model=order_schema.Order)
+def read_order(orderNumber: int, db: Session = Depends(get_db)):
+    order = order_crud.get_order(db, orderNumber)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+@app.post("/orders", response_model=order_schema.Order)
+def create_order(order: order_schema.OrderCreate, db: Session = Depends(get_db)):
+    return order_crud.create_order(db, order)
+
+
+@app.put("/orders/{orderNumber}", response_model=order_schema.Order)
+def update_order(orderNumber: int, order: order_schema.OrderUpdate, db: Session = Depends(get_db)):
+    updated = order_crud.update_order(db, orderNumber, order)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return updated
+
+@app.delete("/orders/{orderNumber}", response_model=order_schema.Order)
+def delete_order(orderNumber: int, db: Session = Depends(get_db)):
+    deleted = order_crud.delete_order(db, orderNumber)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return deleted
+
+# ============================
+# PAYMENTS ENDPOINTS
+# ============================
+
+@app.get("/payments", response_model=list[payment_schema.Payment])
+def read_payments(db: Session = Depends(get_db)):
+    return payment_crud.get_all(db)
+
+@app.get("/payments/{customerNumber}/{checkNumber}", response_model=payment_schema.Payment)
+def read_payment(customerNumber: int, checkNumber: str, db: Session = Depends(get_db)):
+    payment = payment_crud.get_one(db, customerNumber, checkNumber)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return payment
+
+@app.post("/payments", response_model=payment_schema.Payment)
+def create_payment(data: payment_schema.PaymentCreate, db: Session = Depends(get_db)):
+    return payment_crud.create(db, data)
+
+@app.put("/payments/{customerNumber}/{checkNumber}", response_model=payment_schema.Payment)
+def update_payment(customerNumber: int, checkNumber: str, data: payment_schema.PaymentCreate, db: Session = Depends(get_db)):
+    result = payment_crud.update(db, customerNumber, checkNumber, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return result
+
+@app.delete("/payments/{customerNumber}/{checkNumber}")
+def delete_payment(customerNumber: int, checkNumber: str, db: Session = Depends(get_db)):
+    result = payment_crud.delete(db, customerNumber, checkNumber)
+    if not result:
+        raise HTTPException(status_code=404, detail="Payment not found")
     return {"ok": True}

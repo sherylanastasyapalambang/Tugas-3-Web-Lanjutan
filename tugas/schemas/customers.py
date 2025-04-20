@@ -16,7 +16,7 @@ class CustomerBase(BaseModel):
     creditLimit: Optional[float] = None
 
 class CustomerCreate(CustomerBase):
-    pass
+    customerNumber: int
 
 class Customer(CustomerBase):
     customerNumber: int
