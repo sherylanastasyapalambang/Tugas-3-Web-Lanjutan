@@ -1,7 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException
+from datetime import datetime, timedelta
+from typing import Annotated, List
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette import status
 from database import SessionLocal
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import FastAPI, Depends, HTTPException, Security
 
+
+import schemas.token as token_schema
 # Import model CRUD and schemas
 import crud.productlines as productline_crud
 import schemas.productlines as productline_schema
@@ -15,11 +24,36 @@ import schemas.offices as office_schema
 import crud.employees as employee_crud
 import schemas.employees as employee_schema
 
+import crud.customers as customer_crud
+import schemas.customers as customer_schema
+
+import crud.orderdetails as od_crud
+import schemas.orderdetails as od_schema
+
+import crud.orders as order_crud
+import schemas.orders as order_schema
+
+import crud.payments as payment_crud
+import schemas.payments as payment_schema
 
 
 from fastapi.middleware.cors import CORSMiddleware
 
+
+# Konfigurasi JWT
+SECRET_KEY = "2db2a6ad3279e99cf7eb76faec4f75d9f88c6522a178d89a4ddb7ed875cb4476"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")#bagian hash
+security =  OAuth2PasswordBearer(tokenUrl="login")#ambil tokenjwt
+
 app = FastAPI()
+
+# Fake user database (hny utk demonstrasi)
+fake_users_db = {
+    "sisfo": {"password": "sisfo123"}
+}
 
 # CORS Middleware
 app.add_middleware(
@@ -38,18 +72,73 @@ def get_db():
     finally:
         db.close()
 
+
+#utk  verif pass n username
+def fake_authenticate_user(username: str, password: str):
+    user = fake_users_db.get(username)
+    if user and user["password"] == password:
+        return {"sub": username}  # Mengembalikan informasi pengguna yang akan dimasukkan ke dalam token
+    return None
+
+#bagian buat jwt token
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    print(f"Waktu kedaluwarsa token (UTC): {expire}")
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+#ini verifikasi tokennys
+async def get_current_user(token: str = Security(security), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+        # Di aplikasi nyata, Anda mungkin ingin mengambil informasi pengguna dari database berdasarkan user_id, disini kt akan kembalikan user_id dr token sj dlu
+        return {"user_id": user_id}
+    except JWTError:
+        raise credentials_exception
+    
+@app.post("/login", response_model=token_schema.Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = fake_authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data=user, expires_delta=access_token_expires)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+
 # ============================ 
 # PRODUCTLINES ENDPOINTS
 # ============================
 
 # Get all product lines
 @app.get("/productlines", response_model=list[productline_schema.ProductLine])
-def get_all_productlines(db: Session = Depends(get_db)):
+def get_all_productlines(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     return productline_crud.get_all(db)
 
 # Get one product line by id
 @app.get("/productlines/{id}", response_model=productline_schema.ProductLine)
-def get_one_productline(id: str, db: Session = Depends(get_db)):
+def get_one_productline(
+    id: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     result = productline_crud.get_one(db, id)
     if not result:
         raise HTTPException(status_code=404, detail="Not found")
@@ -57,12 +146,22 @@ def get_one_productline(id: str, db: Session = Depends(get_db)):
 
 # Create a product line
 @app.post("/productlines/{id}", response_model=productline_schema.ProductLine)
-def create_productline(id: str, data: productline_schema.ProductLineCreate, db: Session = Depends(get_db)):
+def create_productline(
+    id: str, 
+    data: productline_schema.ProductLineCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     return productline_crud.create(db, id, data)
 
 # Update a product line
 @app.put("/productlines/{id}", response_model=productline_schema.ProductLine)
-def update_productline(id: str, data: productline_schema.ProductLineCreate, db: Session = Depends(get_db)):
+def update_productline(
+    id: str, 
+    data: productline_schema.ProductLineCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     result = productline_crud.update(db, id, data)
     if not result:
         raise HTTPException(status_code=404, detail="Not found")
@@ -70,7 +169,11 @@ def update_productline(id: str, data: productline_schema.ProductLineCreate, db: 
 
 # Delete a product line
 @app.delete("/productlines/{id}")
-def delete_productline(id: str, db: Session = Depends(get_db)):
+def delete_productline(
+    id: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     result = productline_crud.delete(db, id)
     if not result:
         raise HTTPException(status_code=404, detail="Not found")
@@ -81,29 +184,49 @@ def delete_productline(id: str, db: Session = Depends(get_db)):
 # PRODUCTS ENDPOINTS
 # ============================
 @app.get("/products", response_model=list[product_schema.Product])
-def read_products(db: Session = Depends(get_db)):
+def read_products(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     return product_crud.get_all_products(db)
 
 @app.get("/products/{productCode}", response_model=product_schema.Product)
-def read_product(productCode: str, db: Session = Depends(get_db)):
+def read_product(
+    productCode: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     db_product = product_crud.get_product_by_code(db, productCode)
     if db_product is None:
         raise HTTPException(status_code=404, detail="Product not found")
     return db_product
 
 @app.post("/products", response_model=product_schema.Product)
-def create_product(product: product_schema.ProductCreate, db: Session = Depends(get_db)):
+def create_product(
+    product: product_schema.ProductCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     return product_crud.create_product(db, product)
 
 @app.put("/products/{productCode}", response_model=product_schema.Product)
-def update_product(productCode: str, product: product_schema.ProductUpdate, db: Session = Depends(get_db)):
+def update_product(
+    productCode: str, 
+    product: product_schema.ProductUpdate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     db_product = product_crud.update_product(db, productCode, product)
     if db_product is None:
         raise HTTPException(status_code=404, detail="Product not found")
     return db_product
 
 @app.delete("/products/{productCode}", response_model=product_schema.Product)
-def delete_product(productCode: str, db: Session = Depends(get_db)):
+def delete_product(
+    productCode: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     db_product = product_crud.delete_product(db, productCode)
     if db_product is None:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -113,29 +236,49 @@ def delete_product(productCode: str, db: Session = Depends(get_db)):
 # OFFICES ENDPOINTS
 # ============================
 @app.get("/offices", response_model=list[office_schema.Office])
-def read_offices(db: Session = Depends(get_db)):
+def read_offices(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     return office_crud.get_all(db)
 
 @app.get("/offices/{officeCode}", response_model=office_schema.Office)
-def read_office(officeCode: str, db: Session = Depends(get_db)):
+def read_office(
+    officeCode: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     office = office_crud.get_one(db, officeCode)
     if not office:
         raise HTTPException(status_code=404, detail="Office not found")
     return office
 
 @app.post("/offices", response_model=office_schema.Office)
-def create_office(data: office_schema.OfficeCreate, db: Session = Depends(get_db)):
+def create_office(
+    data: office_schema.OfficeCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     return office_crud.create(db, data)
 
 @app.put("/offices/{officeCode}", response_model=office_schema.Office)
-def update_office(officeCode: str, data: office_schema.OfficeCreate, db: Session = Depends(get_db)):
+def update_office(
+    officeCode: str, 
+    data: office_schema.OfficeCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     result = office_crud.update(db, officeCode, data)
     if not result:
         raise HTTPException(status_code=404, detail="Not found")
     return result
 
 @app.delete("/offices/{officeCode}")
-def delete_office(officeCode: str, db: Session = Depends(get_db)):
+def delete_office(
+    officeCode: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     result = office_crud.delete(db, officeCode)
     if not result:
         raise HTTPException(status_code=404, detail="Office not found")
@@ -146,22 +289,38 @@ def delete_office(officeCode: str, db: Session = Depends(get_db)):
 # EMPLOYEES ENDPOINTS
 # ============================
 @app.get("/employees", response_model=list[employee_schema.Employee])
-def read_employees(db: Session = Depends(get_db)):
+def read_employees(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     return employee_crud.get_all(db)
 
 @app.get("/employees/{employeeNumber}", response_model=employee_schema.Employee)
-def read_employee(employeeNumber: int, db: Session = Depends(get_db)):
+def read_employee(
+    employeeNumber: int, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     employee = employee_crud.get_one(db, employeeNumber)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     return employee
 
 @app.post("/employees", response_model=employee_schema.Employee)
-def create_employee(data: employee_schema.EmployeeCreate, db: Session = Depends(get_db)):
+def create_employee(
+    data: employee_schema.EmployeeCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     return employee_crud.create(db, data.employeeNumber, data)
 
 @app.put("/employees/{employeeNumber}", response_model=employee_schema.Employee)
-def update_employee(employeeNumber: int, data: employee_schema.EmployeeCreate, db: Session = Depends(get_db)):
+def update_employee(
+    employeeNumber: int, 
+    data: employee_schema.EmployeeCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     # Memastikan bahwa update menerima data yang benar dan fungsi update di CRUD menangani update sesuai
     result = employee_crud.update(db, employeeNumber, data)
     if not result:
@@ -170,8 +329,233 @@ def update_employee(employeeNumber: int, data: employee_schema.EmployeeCreate, d
 
 
 @app.delete("/employees/{employeeNumber}")
-def delete_employee(employeeNumber: int, db: Session = Depends(get_db)):
+def delete_employee(
+    employeeNumber: int, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     result = employee_crud.delete(db, employeeNumber)
     if not result:
         raise HTTPException(status_code=404, detail="Employee not found")
+    return {"ok": True}
+
+# ============================
+# CUSTOMERS ENDPOINTS
+# ============================
+
+
+@app.get("/customers", response_model=list[customer_schema.Customer])
+def read_customers(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return customer_crud.get_all(db)
+
+@app.get("/customers/{customerNumber}", response_model=customer_schema.Customer)
+def read_customer(
+    customerNumber: int, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    customer = customer_crud.get_one(db, customerNumber)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+@app.post("/customers", response_model=customer_schema.Customer)
+def create_customer(
+    data: customer_schema.CustomerCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return customer_crud.create(db, data)
+
+@app.put("/customers/{customerNumber}", response_model=customer_schema.Customer)
+def update_customer(
+    customerNumber: int, 
+    data: customer_schema.CustomerCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    result = customer_crud.update(db, customerNumber, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return result
+
+@app.delete("/customers/{customerNumber}")
+def delete_customer(
+    customerNumber: int, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    result = customer_crud.delete(db, customerNumber)
+    if not result:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"ok": True}
+
+
+# ============================
+# ORDER DETAILS ENDPOINTS
+# ============================
+
+@app.get("/orderdetails", response_model=list[od_schema.OrderDetail])
+def read_orderdetails(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return od_crud.get_all_orderdetails(db)
+
+@app.get("/orderdetails/{orderNumber}/{productCode}", response_model=od_schema.OrderDetail)
+def read_orderdetail(
+    orderNumber: int, 
+    productCode: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    od = od_crud.get_orderdetail(db, orderNumber, productCode)
+    if not od:
+        raise HTTPException(status_code=404, detail="OrderDetail not found")
+    return od
+
+@app.post("/orderdetails", response_model=od_schema.OrderDetail)
+def create_orderdetail(
+    od: od_schema.OrderDetailCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return od_crud.create_orderdetail(db, od)
+
+@app.put("/orderdetails/{orderNumber}/{productCode}", response_model=od_schema.OrderDetail)
+def update_orderdetail(
+    orderNumber: int, 
+    productCode: str, 
+    od: od_schema.OrderDetailUpdate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    updated = od_crud.update_orderdetail(db, orderNumber, productCode, od)
+    if not updated:
+        raise HTTPException(status_code=404, detail="OrderDetail not found")
+    return updated
+
+@app.delete("/orderdetails/{orderNumber}/{productCode}", response_model=od_schema.OrderDetail)
+def delete_orderdetail(
+    orderNumber: int, 
+    productCode: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    deleted = od_crud.delete_orderdetail(db, orderNumber, productCode)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="OrderDetail not found")
+    return deleted
+
+
+# ============================
+# ORDER ENDPOINTS
+# ============================
+@app.get("/orders", response_model=list[order_schema.Order])
+def read_orders(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return order_crud.get_all_orders(db)
+
+@app.get("/orders/{orderNumber}", response_model=order_schema.Order)
+def read_order(
+    orderNumber: int, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    order = order_crud.get_order(db, orderNumber)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+@app.post("/orders", response_model=order_schema.Order)
+def create_order(
+    order: order_schema.OrderCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return order_crud.create_order(db, order)
+
+
+@app.put("/orders/{orderNumber}", response_model=order_schema.Order)
+def update_order(
+    orderNumber: int, 
+    order: order_schema.OrderUpdate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    updated = order_crud.update_order(db, orderNumber, order)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return updated
+
+@app.delete("/orders/{orderNumber}", response_model=order_schema.Order)
+def delete_order(
+    orderNumber: int, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    deleted = order_crud.delete_order(db, orderNumber)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return deleted
+
+# ============================
+# PAYMENTS ENDPOINTS
+# ============================
+
+@app.get("/payments", response_model=list[payment_schema.Payment])
+def read_payments(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return payment_crud.get_all(db)
+
+@app.get("/payments/{customerNumber}/{checkNumber}", response_model=payment_schema.Payment)
+def read_payment(
+    customerNumber: int, 
+    checkNumber: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    payment = payment_crud.get_one(db, customerNumber, checkNumber)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return payment
+
+@app.post("/payments", response_model=payment_schema.Payment)
+def create_payment(
+    data: payment_schema.PaymentCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return payment_crud.create(db, data)
+
+@app.put("/payments/{customerNumber}/{checkNumber}", response_model=payment_schema.Payment)
+def update_payment(
+    customerNumber: int, 
+    checkNumber: str, 
+    data: payment_schema.PaymentCreate, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    result = payment_crud.update(db, customerNumber, checkNumber, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return result
+
+@app.delete("/payments/{customerNumber}/{checkNumber}")
+def delete_payment(
+    customerNumber: int, 
+    checkNumber: str, 
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    result = payment_crud.delete(db, customerNumber, checkNumber)
+    if not result:
+        raise HTTPException(status_code=404, detail="Payment not found")
     return {"ok": True}

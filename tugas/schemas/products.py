@@ -23,3 +23,6 @@ class ProductSimple(ProductCreate):
 class Product(ProductSimple):
     class Config:
         orm_mode = True
+
+
+

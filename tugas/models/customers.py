@@ -21,3 +21,5 @@ class Customer(Base):
 
     # Relationship with Employee
     salesRep = relationship("Employee", back_populates="customers")
+    orders = relationship("Order", back_populates="customer")
+    payments = relationship("Payment", back_populates="customer", cascade="all, delete-orphan")
