@@ -1,22 +1,21 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from database import Base
 
 class Employee(Base):
     __tablename__ = "employees"
 
     employeeNumber = Column(Integer, primary_key=True, index=True)
-    lastName = Column(String(50), nullable=False)
-    firstName = Column(String(50), nullable=False)
-    extension = Column(String(10), nullable=False)
-    email = Column(String(100), nullable=False)
-    officeCode = Column(String(10), ForeignKey("offices.officeCode"), nullable=False)
+    lastName = Column(String(50))
+    firstName = Column(String(50))
+    extension = Column(String(10))
+    email = Column(String(100))
+    officeCode = Column(String(10), ForeignKey("offices.officeCode"))
     reportsTo = Column(Integer, ForeignKey("employees.employeeNumber"), nullable=True)
-    jobTitle = Column(String(50), nullable=False)
+    jobTitle = Column(String(50))
 
-    # Relasi ke atasan (self-reference)
-    manager = relationship("Employee", remote_side=[employeeNumber], back_populates="subordinates")
-    subordinates = relationship("Employee", back_populates="manager")
+    # Relasi ke office
+    office = relationship("Office", back_populates="employees")
 
-    # Relasi ke customers (jika sales rep)
-    customers = relationship("Customer", back_populates="salesRep")
+    # Relasi self-referencing: siapa yang menjadi bos (atasan)
+    manager = relationship("Employee", remote_side=[employeeNumber], backref=backref("subordinates", lazy="joined"))

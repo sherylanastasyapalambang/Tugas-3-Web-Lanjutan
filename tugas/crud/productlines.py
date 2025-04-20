@@ -18,6 +18,17 @@ def create(db: Session, line_id: str, data: ProductLineCreate):
     db.refresh(db_line)
     return db_line
 
+# Update an existing ProductLine
+def update(db: Session, line_id: str, data: ProductLineCreate):
+    db_line = get_one(db, line_id)
+    if not db_line:
+        return None
+    for key, value in data.dict().items():
+        setattr(db_line, key, value)
+    db.commit()
+    db.refresh(db_line)
+    return db_line
+
 # Delete a ProductLine
 def delete(db: Session, line_id: str):
     obj = get_one(db, line_id)
